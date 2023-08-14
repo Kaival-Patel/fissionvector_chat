@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "139350336575",
+    "project_id": "fissionvector-ca585",
+    "storage_bucket": "fissionvector-ca585.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:139350336575:android:d51039eaa13bb8df36048a",
+        "android_client_info": {
+          "package_name": "com.fissionvector"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "139350336575-8q5tog1tf40crqnfa6pspu2cs0gdr5o7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBr5o7UEwl9sqVxspZXL0wva88t8k8e75o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "139350336575-8q5tog1tf40crqnfa6pspu2cs0gdr5o7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
