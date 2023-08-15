@@ -50,6 +50,7 @@ class ConversationModel {
   bool get isCallConnected => connectionType == CallConnectionType.connected;
 
   bool get isOutgoingCall => connectionType == CallConnectionType.outgoing;
+  bool get isFinished => connectionType == CallConnectionType.finished;
 
   bool get isSentByMe => fromId == authRepo.userDm().uid;
 

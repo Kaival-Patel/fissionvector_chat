@@ -46,6 +46,8 @@ dependencies:
   timeago:
   dio:
   fluttertoast:
+  avatar_glow: ^2.0.2
+  permission_handler:
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -7,16 +7,32 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
-class ChatScreen extends StatelessWidget {
+class ChatScreen extends StatefulWidget {
   final UserDm userDm;
   final String chatDocId;
 
   ChatScreen({required this.userDm, required this.chatDocId, Key? key})
-      : super(key: key) {
-    c = Get.put(ChatController(chatId: chatDocId, userDm: userDm));
+      : super(key: key);
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  late ChatController c;
+
+  @override
+  void initState() {
+    c = Get.put(
+        ChatController(chatId: widget.chatDocId, userDm: widget.userDm));
+    super.initState();
   }
 
-  late ChatController c;
+  @override
+  void dispose() {
+    c.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,16 +42,17 @@ class ChatScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(userDm.name),
+            Text(widget.userDm.name),
             Text(
-              userDm.subject.capitalizeFirst ?? '',
+              widget.userDm.subject.capitalizeFirst ?? '',
               style: context.textTheme.bodySmall,
             )
           ],
         ),
         actions: [
           IconButton(onPressed: c.makeAudioCall, icon: const Icon(Icons.phone)),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.video_call)),
+          IconButton(
+              onPressed: c.makeVideoCall, icon: const Icon(Icons.video_call)),
         ],
       ),
       backgroundColor: context.theme.cardColor,
@@ -43,6 +60,12 @@ class ChatScreen extends StatelessWidget {
         () => c.isInCall() && c.callConversationModel() != null
             ? AppCall(
                 chatModel: c.callConversationModel()!,
+                engine: c.engine,
+                onSpeakerToggle: c.toggleSpeaker,
+                onMicToggle: c.toggleMic,
+                isMicEnabled: c.isMicEnabled(),
+                onCameraSwitch: c.switchCamera,
+                isSpeakerEnabled: c.isSpeakerEnabled(),
                 onCallUpdated: (CallConnectionType callConnectionType) {
                   c.updateCall(callConnectionType: callConnectionType);
                 })
@@ -136,6 +159,18 @@ class ChatWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (roomModel.isCall) {
+      return Center(
+        child: Container(
+          decoration: BoxDecoration(
+              color: Colors.indigo[100],
+              borderRadius: BorderRadius.circular(5)),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+          child: Text(roomModel.msg),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: roomModel.isSentByMe
           ? CrossAxisAlignment.end

@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:fissionvector_chat/firebase/chat_query.dart';
 import 'package:fissionvector_chat/models/agora_model.dart';
@@ -13,6 +12,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:get/get.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../utils/functions/strings_constants.dart';
 
@@ -24,11 +24,13 @@ class ChatController extends GetxController {
   StreamSubscription? chatModelSubscription;
   RxList<ConversationModel> chatMessages = <ConversationModel>[].obs;
   Rx<ChatModel> chatModel = ChatModel.fromJson({}).obs;
-  late RtcEngine _engine;
+  late RtcEngine engine;
   Rx<AgoraResDm> agoraSettings = AgoraResDm().obs;
   RxBool isInCall = false.obs;
   Rxn<ConversationModel> callConversationModel = Rxn<ConversationModel>();
   RxBool isJoinedChannel = false.obs;
+  RxBool isSpeakerEnabled = false.obs;
+  RxBool isMicEnabled = false.obs;
 
   ChatController({
     required this.chatId,
@@ -37,7 +39,7 @@ class ChatController extends GetxController {
 
   @override
   void onInit() {
-    streamChatModel();
+
     initAgoraRTC();
     super.onInit();
   }
@@ -46,7 +48,15 @@ class ChatController extends GetxController {
   void dispose() {
     chatModelSubscription?.cancel();
     chatSubscription?.cancel();
-    _engine.leaveChannel();
+    engine.leaveChannel(
+      options: const LeaveChannelOptions(
+        stopAllEffect: true,
+        stopMicrophoneRecording: true,
+        stopAudioMixing: true,
+      ),
+    );
+    engine.release(sync: true);
+    debugPrint('Releasing engine');
     super.dispose();
   }
 
@@ -76,13 +86,14 @@ class ChatController extends GetxController {
       }
       if (chatMessages.isNotEmpty &&
           chatMessages.first.isCall &&
-          (chatMessages.first.isIncomingCall ||
-              chatMessages.first.isOutgoingCall)) {
+          (!chatMessages.first.isFinished)) {
         debugPrint(chatMessages.first.toJson().toString());
         callConversationModel(chatMessages.first);
+        isInCall(true);
         handleCallAccordingToStatus();
       } else {
         callConversationModel.value = null;
+        leaveChannelAndDestroy();
         isInCall(false);
       }
       clearReadUnread();
@@ -94,6 +105,13 @@ class ChatController extends GetxController {
   }
 
   void makeAudioCall() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.microphone,
+    ].request();
+    if (statuses.values.where((element) => !element.isGranted).isNotEmpty) {
+      Fluttertoast.showToast(msg: 'Permissions required to make call');
+      return;
+    }
     await ChatQuery().sendCall(
       message: '${authRepo.userDm().name} requested for audio call',
       chatId: chatId,
@@ -104,6 +122,14 @@ class ChatController extends GetxController {
   }
 
   void makeVideoCall() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.microphone,
+      Permission.camera,
+    ].request();
+    if (statuses.values.where((element) => !element.isGranted).isNotEmpty) {
+      Fluttertoast.showToast(msg: 'Permissions required to make call');
+      return;
+    }
     await ChatQuery().sendCall(
       message: '${authRepo.userDm().name} requested for video call',
       chatId: chatId,
@@ -139,28 +165,37 @@ class ChatController extends GetxController {
       } else {
         Fluttertoast.showToast(msg: 'Oops, something is not right');
       }
-      _engine = createAgoraRtcEngine();
-      _engine.initialize(const RtcEngineContext(
+      engine = createAgoraRtcEngine();
+      engine.initialize(const RtcEngineContext(
         appId: StringConstants.agoraAppId,
-        channelProfile: ChannelProfileType.channelProfileCommunication1v1,
+        channelProfile: ChannelProfileType.channelProfileCommunication,
       ));
+      await engine.disableVideo();
+      await engine.disableAudio();
       _addAgoraEventHandlers();
-      await _engine.disableVideo();
-      await _engine.disableAudio();
+
     } catch (e) {
       debugPrint("Error initing engine : $e");
     }
+    streamChatModel();
   }
 
   void _addAgoraEventHandlers() {
     /// API CALL INCASE OF TUTOR ONLY
-    _engine.registerEventHandler(RtcEngineEventHandler(
+    engine.registerEventHandler(RtcEngineEventHandler(
       onError: (err, msg) {
         debugPrint('Message: $msg');
       },
       onLeaveChannel: (connection, stats) {
         Fluttertoast.showToast(msg: 'Left Call');
         if (connection.localUid == authRepo.userDm().uid) {
+          isJoinedChannel(false);
+        }
+      },
+      onConnectionStateChanged: (connection, state, reason) {
+        if (state == ConnectionStateType.connectionStateConnected) {
+          isJoinedChannel(true);
+        } else {
           isJoinedChannel(false);
         }
       },
@@ -181,23 +216,33 @@ class ChatController extends GetxController {
   void joinChannel({required bool isVideoCall}) async {
     try {
       if (!isJoinedChannel()) {
-        await _engine.joinChannel(
+        engine = createAgoraRtcEngine();
+        await engine.initialize(const RtcEngineContext(
+          appId: StringConstants.agoraAppId,
+          channelProfile: ChannelProfileType.channelProfileCommunication,
+        ));
+        await engine.enableAudio();
+        if (isVideoCall) {
+          engine.enableVideo();
+        }
+        _addAgoraEventHandlers();
+        await engine.joinChannel(
           token: agoraSettings().token,
           uid: authRepo.userDm().uid,
           channelId: chatId,
           options: ChannelMediaOptions(
             token: agoraSettings().token,
+            publishMicrophoneTrack: true,
             channelProfile: ChannelProfileType.channelProfileCommunication1v1,
           ),
         );
-        _engine.enableAudio();
-        if (isVideoCall) {
-          _engine.enableVideo();
-        }
+        isJoinedChannel(true);
+        isMicEnabled(true);
       }
     } catch (e) {
-      if (e is PlatformException && e.code == '-17') {
-        _engine.leaveChannel();
+      Fluttertoast.showToast(msg: 'Error : $e');
+      if (e is AgoraRtcException && e.code == -17) {
+        engine.leaveChannel();
         Fluttertoast.showToast(msg: 'Try again');
       }
     }
@@ -212,13 +257,43 @@ class ChatController extends GetxController {
     }
   }
 
-  void handleCallAccordingToStatus() {
-    if (callConversationModel() != null && !isInCall()) {
-      isInCall.value = true;
+  void toggleSpeaker() {
+    isSpeakerEnabled(!isSpeakerEnabled());
+    engine.setEnableSpeakerphone(isSpeakerEnabled());
+  }
+
+  void toggleMic() {
+    isMicEnabled(!isMicEnabled());
+    engine.muteLocalAudioStream(isMicEnabled());
+  }
+
+  void switchCamera() {
+    engine.switchCamera();
+  }
+
+  void leaveChannelAndDestroy() async {
+    await engine.muteLocalVideoStream(true);
+    await engine.muteLocalAudioStream(true);
+    await engine.disableAudio();
+    await engine.disableVideo();
+    engine.leaveChannel(
+      options: const LeaveChannelOptions(
+        stopAllEffect: true,
+        stopMicrophoneRecording: true,
+        stopAudioMixing: true,
+      ),
+    );
+    engine.release(sync: true);
+  }
+
+  void handleCallAccordingToStatus() async {
+    if (callConversationModel() != null) {
       debugPrint('IN CALL');
       switch (callConversationModel()!.connectionType) {
         case CallConnectionType.incoming:
-          Fluttertoast.showToast(msg: 'Incoming call');
+          joinChannel(
+              isVideoCall:
+                  callConversationModel()!.type == MessageType.videoCall);
           break;
         case CallConnectionType.connected:
           Fluttertoast.showToast(msg: 'Call Connected');
@@ -232,11 +307,19 @@ class ChatController extends GetxController {
                   callConversationModel()!.type == MessageType.videoCall);
           break;
         case CallConnectionType.finished:
-          _engine.leaveChannel();
+          debugPrint('Finished Channel 2');
+          callConversationModel.value = null;
+          isInCall(false);
+          isSpeakerEnabled(false);
+          leaveChannelAndDestroy();
           break;
       }
     } else {
       isInCall.value = false;
+      if (isJoinedChannel()) {
+        debugPrint('Finished Channel');
+        leaveChannelAndDestroy();
+      }
     }
   }
 }

@@ -117,7 +117,6 @@ class ChatQuery {
         "updated_by": conversationModel.fromId,
         "unread_count": FieldValue.increment(1)
       });
-      debugPrint('DOC ID -> ${conversationModel.docId}');
       await chatColRef
           .doc(conversationModel.chatId)
           .collection(conversation)
