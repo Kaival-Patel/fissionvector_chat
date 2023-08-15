@@ -24,6 +24,7 @@ class ConversationModel {
     required this.fromId,
     required this.toId,
     required this.status,
+    required this.connectionType,
     this.docRef,
     this.linkedLeft,
     this.linkedRight,
@@ -37,9 +38,18 @@ class ConversationModel {
   String chatId;
   MessageType type;
   int status;
-
+  CallConnectionType connectionType;
   DocumentReference? docRef;
   DocumentReference? linkedLeft, linkedRight;
+
+  bool get isCall =>
+      type == MessageType.audioCall || type == MessageType.videoCall;
+
+  bool get isIncomingCall => connectionType == CallConnectionType.incoming;
+
+  bool get isCallConnected => connectionType == CallConnectionType.connected;
+
+  bool get isOutgoingCall => connectionType == CallConnectionType.outgoing;
 
   bool get isSentByMe => fromId == authRepo.userDm().uid;
 
@@ -62,6 +72,8 @@ class ConversationModel {
             : Timestamp(0, 0),
         msg: json["msg"] ?? "",
         type: (int.tryParse(json["type"].toString()) ?? 0).toMessageType,
+        connectionType:
+            (int.tryParse(json["status"].toString()) ?? 0).toCallConnectionType,
         status: json["status"] ?? 0,
       );
 
@@ -70,7 +82,7 @@ class ConversationModel {
         "updated_at": updatedAt,
         "msg": msg,
         "type": type.toInt,
-        "status": status,
+        "status": connectionType.toInt,
         "chat_id": chatId,
         "from_id": fromId,
         "to_id": toId,

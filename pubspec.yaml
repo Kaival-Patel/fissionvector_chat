@@ -44,6 +44,8 @@ dependencies:
   agora_rtm:
   intl:
   timeago:
+  dio:
+  fluttertoast:
 dev_dependencies:
   flutter_test:
     sdk: flutter
